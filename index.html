@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#e9eef2">
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icon-192.png">
+<title>Short Scanner</title>
+<style>
+:root{--bg:#e9eef2;--card:#fff;--ink:#13222d;--mut:#5d6f7c;--ln:#d3dce3;--red:#c8362f;--amb:#b7791f;--ok:#17805f;--chip:#f1f5f8}
+@media(prefers-color-scheme:dark){:root{--bg:#10202a;--card:#182c38;--ink:#e7eef3;--mut:#96a9b6;--ln:#294253;--red:#ff6b62;--amb:#f0b64a;--ok:#4fd1a3;--chip:#20394a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;padding:max(14px,env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom))}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
+h1{font-size:20px;margin:0;letter-spacing:-.2px}
+#st{color:var(--mut);font-size:12.5px;margin-top:2px}
+.btns{display:flex;gap:6px;flex-shrink:0}
+button{font:inherit;font-size:13px;border:1px solid var(--ln);background:var(--card);color:var(--ink);border-radius:8px;padding:7px 11px}
+button:focus-visible,summary:focus-visible{outline:2px solid var(--amb);outline-offset:2px}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:10px;padding:12px;margin-bottom:10px}
+.top{display:flex;justify-content:space-between;align-items:baseline}
+.sym{font-weight:700;font-size:17px}.pct{color:var(--ok);font-weight:600;font-variant-numeric:tabular-nums}
+.sub{color:var(--mut);font-size:12.5px;font-variant-numeric:tabular-nums}
+.bar{height:8px;background:var(--chip);border-radius:4px;margin:10px 0 6px;overflow:hidden}.bar i{display:block;height:100%}
+.row{display:flex;justify-content:space-between;align-items:center}
+.lab{font-weight:700;font-size:13px;padding:3px 9px;border-radius:6px;background:var(--chip)}
+.SHORT{color:var(--red)}.WAIT{color:var(--amb)}.SKIP{color:var(--mut)}
+.sc{font-variant-numeric:tabular-nums;font-weight:700}
+details{margin-top:8px;border-top:1px solid var(--ln);padding-top:8px}
+summary{cursor:pointer;color:var(--mut);font-size:13px}
+.ck{display:grid;grid-template-columns:22px 1fr auto;gap:2px 6px;font-size:13.5px;margin-top:8px}
+.ck b{font-weight:600}.ck span{color:var(--mut);text-align:right;font-variant-numeric:tabular-nums}
+.y{color:var(--ok)}.n{color:var(--red)}.p{color:var(--amb)}
+.plan{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px;text-align:center}
+.plan div{background:var(--chip);border-radius:8px;padding:6px 2px;font-size:11.5px;color:var(--mut)}
+.plan b{display:block;color:var(--ink);font-size:13px;font-variant-numeric:tabular-nums}
+footer{color:var(--mut);font-size:12px;margin-top:14px}
+</style></head><body>
+<header><div><h1>Short Scanner</h1><div id="st">Starting…</div></div>
+<div class="btns"><button id="al">Alerts</button><button id="rf">Refresh</button></div></header>
+<main id="out"></main>
+<footer>Score = how many strategy checks pass (0–100). It is not a win probability and not financial advice. Always check the 15m chart and funding on Binance before trading. Stop loss is mandatory.</footer>
+<script>
+const API="https://fapi.binance.com/fapi/v1/",TOP=10,MINVOL=5e6,EVERY=60000;
+const $=s=>document.querySelector(s),seen={};
+const j=async u=>{const r=await fetch(API+u);if(!r.ok)throw new Error("HTTP "+r.status);return r.json()};
+const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+const fp=x=>+x.toPrecision(5);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function analyze(t,k15,k1h,pi){
+  const c=k15.map(k=>({o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]})).slice(0,-1); // closed candles only
+  const h1=k1h.map(k=>+k[4]),price=+t.lastPrice,pct=+t.priceChangePercent,qv=+t.quoteVolume;
+  const L=c[c.length-1],P=c[c.length-2],ma=avg(h1.slice(-25)),ext=(price/ma-1)*100;
+  const hi24=Math.max(...c.map(x=>x.h)),recHi=Math.max(...c.slice(-8).map(x=>x.h));
+  const rv=avg(c.slice(-4).map(x=>x.v)),bv=avg(c.slice(-24,-4).map(x=>x.v)),allv=avg(c.map(x=>x.v));
+  const div=recHi>=hi24*.98&&bv>0&&rv<.7*bv;
+  const blow=c.slice(-8).some(x=>{const r=x.h-x.l||1;return x.v>=3*allv&&((x.h-Math.max(x.o,x.c))/r>=.5||x.c<x.o)});
+  const rg=L.h-L.l||1,red=L.c<L.o,wick=(L.h-Math.max(L.o,L.c))/rg>=.5,brk=L.c<P.l;
+  const bearN=(red||wick?1:0)+(brk?1:0);
+  const fr=pi?+pi.lastFundingRate*100:0,fOk=fr>=-0.05;
+  const stop=Math.max(price,...c.slice(-16).map(x=>x.h))*1.004;
+  const tp1=ma<price?ma:price*.96,low=Math.min(...c.map(x=>x.l)),tp2=low<tp1?low:tp1*.97;
+  const rr=(price-tp1)/(stop-price);
+  const rows=[
+    [pct>=15?10:pct>=8?5:0,10,"Big pump","+"+pct.toFixed(1)+"% in 24h"],
+    [ext>=8?15:ext>=4?8:0,15,"Stretched from average",ext.toFixed(1)+"% above 1h MA25"],
+    [div||blow?25:0,25,"Volume signal",div?"New high, volume fading":blow?"Huge-volume spike + rejection":"None yet"],
+    [bearN==2?25:bearN==1?15:0,25,"Bearish candle (15m)",bearN==2?"Rejection + breakdown":bearN==1?(wick?"Upper wick":"Red close"):"Not yet"],
+    [fOk?10:0,10,"Funding ok",fr.toFixed(4)+"%"+(fOk?"":" squeeze risk")],
+    [rr>=2?10:rr>=1.5?5:0,10,"Risk : reward","1 : "+Math.max(rr,0).toFixed(1)],
+    [qv>=2e7?5:qv>=5e6?2:0,5,"Liquidity","$"+(qv/1e6).toFixed(0)+"M 24h volume"]];
+  const score=rows.reduce((s,r)=>s+r[0],0);
+  let lab=score>=75?"SHORT":score>=50?"WAIT":"SKIP";
+  if(lab=="SHORT"&&(bearN==0||rr<1.5))lab="WAIT";
+  if(!fOk)lab="SKIP";
+  return{sym:t.symbol,pct,price,score,lab,rows,stop,tp1,tp2,fr};
+}
+
+function render(res){
+  $("#out").innerHTML=res.sort((a,b)=>b.score-a.score).map(r=>{
+    const col=r.lab=="SHORT"?"var(--red)":r.lab=="WAIT"?"var(--amb)":"var(--mut)";
+    const name=r.lab=="SHORT"?"SHORT SETUP":r.lab;
+    return`<section class="card"><div class="top"><span class="sym">${esc(r.sym.replace("USDT",""))}<span class="sub"> /USDT</span></span><span class="pct">+${r.pct.toFixed(1)}%</span></div>
+    <div class="sub">Price ${fp(r.price)}</div>
+    <div class="bar"><i style="width:${r.score}%;background:${col}"></i></div>
+    <div class="row"><span class="lab ${r.lab}">${name}</span><span class="sc">${r.score}/100</span></div>
+    <details><summary>Checklist and trade plan</summary><div class="ck">${r.rows.map(x=>{const k=x[0]>=x[1]?["✓","y"]:x[0]>0?["~","p"]:["✗","n"];return`<span class="${k[1]}">${k[0]}</span><b>${esc(x[2])}</b><span>${esc(x[3])}</span>`}).join("")}</div>
+    <div class="plan"><div>Entry<b>${fp(r.price)}</b></div><div>Stop<b>${fp(r.stop)}</b></div><div>Target 1<b>${fp(r.tp1)}</b></div><div>Target 2<b>${fp(r.tp2)}</b></div></div></details></section>`}).join("")
+    ||'<p class="sub">No gainers matched the filter right now.</p>';
+}
+
+async function notify(res){
+  if(!("Notification"in window)||Notification.permission!="granted")return;
+  const reg=await navigator.serviceWorker.getRegistration();
+  res.filter(r=>r.lab=="SHORT"&&!(seen[r.sym]>Date.now()-36e5)).forEach(r=>{
+    seen[r.sym]=Date.now();
+    const o={body:`Score ${r.score}/100, entry ${fp(r.price)}, stop ${fp(r.stop)}`,tag:r.sym};
+    reg?reg.showNotification("Short setup: "+r.sym,o):new Notification("Short setup: "+r.sym,o);
+  });
+}
+
+let busy=false;
+async function scan(){
+  if(busy)return;busy=true;$("#st").textContent="Scanning…";
+  try{
+    const[tk,pi]=await Promise.all([j("ticker/24hr"),j("premiumIndex")]);
+    const fm={};pi.forEach(p=>fm[p.symbol]=p);
+    const list=tk.filter(t=>/^[A-Z0-9]+USDT$/.test(t.symbol)&&+t.quoteVolume>=MINVOL&&+t.priceChangePercent>0)
+      .sort((a,b)=>b.priceChangePercent-a.priceChangePercent).slice(0,TOP);
+    const res=await Promise.all(list.map(async t=>{
+      const[a,b]=await Promise.all([j(`klines?symbol=${t.symbol}&interval=15m&limit=97`),j(`klines?symbol=${t.symbol}&interval=1h&limit=30`)]);
+      return analyze(t,a,b,fm[t.symbol]);
+    }));
+    render(res);notify(res);
+    $("#st").textContent="Updated "+new Date().toLocaleTimeString()+" · top "+TOP+" futures gainers";
+  }catch(e){$("#st").textContent="Could not load data ("+e.message+"). Check internet; Binance may be blocked on this network."}
+  busy=false;
+}
+$("#rf").onclick=scan;
+$("#al").onclick=async()=>{
+  if(!("Notification"in window))return alert("Notifications are not supported in this browser.");
+  const p=await Notification.requestPermission();$("#al").textContent=p=="granted"?"Alerts on":"Alerts";
+};
+if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+if("Notification"in window&&Notification.permission=="granted")$("#al").textContent="Alerts on";
+scan();setInterval(()=>{if(!document.hidden)scan()},EVERY);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)scan()});
+</script></body></html>
