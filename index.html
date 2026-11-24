@@ -8,120 +8,161 @@
 :root{--bg:#e9eef2;--card:#fff;--ink:#13222d;--mut:#5d6f7c;--ln:#d3dce3;--red:#c8362f;--amb:#b7791f;--ok:#17805f;--chip:#f1f5f8}
 @media(prefers-color-scheme:dark){:root{--bg:#10202a;--card:#182c38;--ink:#e7eef3;--mut:#96a9b6;--ln:#294253;--red:#ff6b62;--amb:#f0b64a;--ok:#4fd1a3;--chip:#20394a}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;padding:max(14px,env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom))}
-header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
-h1{font-size:20px;margin:0;letter-spacing:-.2px}
-#st{color:var(--mut);font-size:12.5px;margin-top:2px}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;padding:max(14px,env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom));max-width:760px;margin-inline:auto}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
+h1{font-size:20px;margin:0}#st,#btc{color:var(--mut);font-size:12.5px;margin-top:2px}
 .btns{display:flex;gap:6px;flex-shrink:0}
 button{font:inherit;font-size:13px;border:1px solid var(--ln);background:var(--card);color:var(--ink);border-radius:8px;padding:7px 11px}
+button.on{background:var(--ink);color:var(--bg)}
 button:focus-visible,summary:focus-visible{outline:2px solid var(--amb);outline-offset:2px}
+.tabs{display:flex;gap:6px;margin:10px 0}
 .card{background:var(--card);border:1px solid var(--ln);border-radius:10px;padding:12px;margin-bottom:10px}
-.top{display:flex;justify-content:space-between;align-items:baseline}
-.sym{font-weight:700;font-size:17px}.pct{color:var(--ok);font-weight:600;font-variant-numeric:tabular-nums}
+.top,.row{display:flex;justify-content:space-between;align-items:center}
+.sym{font-weight:700;font-size:17px}.pct{color:var(--ok);font-weight:600}
 .sub{color:var(--mut);font-size:12.5px;font-variant-numeric:tabular-nums}
 .bar{height:8px;background:var(--chip);border-radius:4px;margin:10px 0 6px;overflow:hidden}.bar i{display:block;height:100%}
-.row{display:flex;justify-content:space-between;align-items:center}
 .lab{font-weight:700;font-size:13px;padding:3px 9px;border-radius:6px;background:var(--chip)}
-.SHORT{color:var(--red)}.WAIT{color:var(--amb)}.SKIP{color:var(--mut)}
-.sc{font-variant-numeric:tabular-nums;font-weight:700}
+.READY{color:var(--red)}.WATCH{color:var(--amb)}.NEAR,.NO{color:var(--mut)}
+.miss{font-size:12.5px;color:var(--mut);margin-top:6px}
 details{margin-top:8px;border-top:1px solid var(--ln);padding-top:8px}
 summary{cursor:pointer;color:var(--mut);font-size:13px}
-.ck{display:grid;grid-template-columns:22px 1fr auto;gap:2px 6px;font-size:13.5px;margin-top:8px}
-.ck b{font-weight:600}.ck span{color:var(--mut);text-align:right;font-variant-numeric:tabular-nums}
+.ck{display:grid;grid-template-columns:20px 1fr auto;gap:2px 6px;font-size:13.5px;margin-top:6px}
+.ck b{font-weight:600}.ck span:last-child{color:var(--mut);text-align:right;font-size:12.5px}
+h3{font-size:12.5px;color:var(--mut);margin:12px 0 0;font-weight:600}
 .y{color:var(--ok)}.n{color:var(--red)}.p{color:var(--amb)}
 .plan{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px;text-align:center}
 .plan div{background:var(--chip);border-radius:8px;padding:6px 2px;font-size:11.5px;color:var(--mut)}
-.plan b{display:block;color:var(--ink);font-size:13px;font-variant-numeric:tabular-nums}
+.plan b{display:block;color:var(--ink);font-size:13px}
+.note{font-size:13px;margin-top:8px}
 footer{color:var(--mut);font-size:12px;margin-top:14px}
 </style></head><body>
-<header><div><h1>Short Scanner</h1><div id="st">Starting…</div></div>
+<header><div><h1>Short Scanner</h1><div id="st">Starting…</div><div id="btc"></div></div>
 <div class="btns"><button id="al">Alerts</button><button id="rf">Refresh</button></div></header>
+<div class="tabs"><button data-t="ready" class="on"></button><button data-t="watch"></button><button data-t="all"></button></div>
 <main id="out"></main>
-<footer>Score = how many strategy checks pass (0–100). It is not a win probability and not financial advice. Always check the 15m chart and funding on Binance before trading. Stop loss is mandatory.</footer>
+<footer>READY means the coin passed all 12 rules. Only a few coins a day should. Rules are fixed by your strategy; scores are not win probabilities and this is not financial advice. Check the chart and funding on Binance, use a stop loss, and test on Demo first.</footer>
 <script>
-const API="https://fapi.binance.com/fapi/v1/",TOP=10,MINVOL=5e6,EVERY=60000;
+const F="https://fapi.binance.com/",TOP=15,MINVOL=10e6,EVERY=120000;
 const $=s=>document.querySelector(s),seen={};
-const j=async u=>{const r=await fetch(API+u);if(!r.ok)throw new Error("HTTP "+r.status);return r.json()};
-const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
-const fp=x=>+x.toPrecision(5);
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let tab="ready",data=[],busy=false;
+const j=async u=>{const r=await fetch(F+u);if(!r.ok)throw new Error("HTTP "+r.status);return r.json()};
+const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0,mx=a=>Math.max(...a),mn=a=>Math.min(...a);
+const fp=x=>+x.toPrecision(5),esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const mk=k=>({o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]}),rg=x=>x.h-x.l||1e-12,up=x=>(x.h-Math.max(x.o,x.c))/rg(x);
 
-function analyze(t,k15,k1h,pi){
-  const c=k15.map(k=>({o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]})).slice(0,-1); // closed candles only
-  const h1=k1h.map(k=>+k[4]),price=+t.lastPrice,pct=+t.priceChangePercent,qv=+t.quoteVolume;
-  const L=c[c.length-1],P=c[c.length-2],ma=avg(h1.slice(-25)),ext=(price/ma-1)*100;
-  const hi24=Math.max(...c.map(x=>x.h)),recHi=Math.max(...c.slice(-8).map(x=>x.h));
-  const rv=avg(c.slice(-4).map(x=>x.v)),bv=avg(c.slice(-24,-4).map(x=>x.v)),allv=avg(c.map(x=>x.v));
-  const div=recHi>=hi24*.98&&bv>0&&rv<.7*bv;
-  const blow=c.slice(-8).some(x=>{const r=x.h-x.l||1;return x.v>=3*allv&&((x.h-Math.max(x.o,x.c))/r>=.5||x.c<x.o)});
-  const rg=L.h-L.l||1,red=L.c<L.o,wick=(L.h-Math.max(L.o,L.c))/rg>=.5,brk=L.c<P.l;
-  const bearN=(red||wick?1:0)+(brk?1:0);
-  const fr=pi?+pi.lastFundingRate*100:0,fOk=fr>=-0.05;
-  const stop=Math.max(price,...c.slice(-16).map(x=>x.h))*1.004;
-  const tp1=ma<price?ma:price*.96,low=Math.min(...c.map(x=>x.l)),tp2=low<tp1?low:tp1*.97;
-  const rr=(price-tp1)/(stop-price);
-  const rows=[
-    [pct>=15?10:pct>=8?5:0,10,"Big pump","+"+pct.toFixed(1)+"% in 24h"],
-    [ext>=8?15:ext>=4?8:0,15,"Stretched from average",ext.toFixed(1)+"% above 1h MA25"],
-    [div||blow?25:0,25,"Volume signal",div?"New high, volume fading":blow?"Huge-volume spike + rejection":"None yet"],
-    [bearN==2?25:bearN==1?15:0,25,"Bearish candle (15m)",bearN==2?"Rejection + breakdown":bearN==1?(wick?"Upper wick":"Red close"):"Not yet"],
-    [fOk?10:0,10,"Funding ok",fr.toFixed(4)+"%"+(fOk?"":" squeeze risk")],
-    [rr>=2?10:rr>=1.5?5:0,10,"Risk : reward","1 : "+Math.max(rr,0).toFixed(1)],
-    [qv>=2e7?5:qv>=5e6?2:0,5,"Liquidity","$"+(qv/1e6).toFixed(0)+"M 24h volume"]];
-  const score=rows.reduce((s,r)=>s+r[0],0);
-  let lab=score>=75?"SHORT":score>=50?"WAIT":"SKIP";
-  if(lab=="SHORT"&&(bearN==0||rr<1.5))lab="WAIT";
-  if(!fOk)lab="SKIP";
-  return{sym:t.symbol,pct,price,score,lab,rows,stop,tp1,tp2,fr};
+function analyze(t,k15,k1h,k1d,oiH,pi,btc){
+  const c=k15.map(mk).slice(0,-1),H=k1h.map(mk).slice(0,-1),D=k1d.map(mk),n=c.length;
+  if(n<60||H.length<26)return null;
+  const price=+t.lastPrice,pct=+t.priceChangePercent,qv=+t.quoteVolume,L=c[n-1],P=c[n-2];
+  const ma25h=avg(H.slice(-25).map(x=>x.c)),ext=(price/ma25h-1)*100;
+  let pk=0,pj=0;c.slice(-32).forEach((x,i)=>{if(x.h>pk){pk=x.h;pj=i}});
+  const peak=Math.max(pk,price),drop=(peak-price)/peak*100,swLow=mn(c.slice(0,n-32+pj+1).map(x=>x.l));
+  // volume signals
+  const allv=avg(c.map(x=>x.v)),hi24=mx(c.map(x=>x.h)),l16=c.slice(-16);
+  const rv=avg(c.slice(-4).map(x=>x.v)),bv=avg(c.slice(-24,-4).map(x=>x.v));
+  const div=mx(c.slice(-8).map(x=>x.h))>=hi24*.98&&bv>0&&rv<.7*bv;
+  const blow=l16.some(x=>x.v>=2.5*allv&&(up(x)>=.45||x.c<x.o));
+  const dump=drop>=4&&mx(l16.map(x=>x.v))>=2.5*allv;
+  const prior=mx(c.slice(0,n-16).map(x=>x.h)),fbo=mx(l16.map(x=>x.h))>prior*1.002&&L.c<prior;
+  const fade=price>=peak*.97&&rv<.5*avg(c.slice(-16,-4).map(x=>x.v));
+  const vol=[div&&"new high on fading volume",blow&&"blow-off spike",dump&&"spike then dump",fbo&&"failed breakout",fade&&"volume drying up"].filter(Boolean);
+  const strong=c.slice(-2).every(x=>x.c>x.o)&&L.v>=1.5*avg(c.slice(-22,-2).map(x=>x.v))&&L.c>=peak*.995;
+  // price action
+  const ma20=avg(c.slice(-20).map(x=>x.c));
+  const bs=[(L.c<L.o&&(L.o-L.c)/rg(L)>=.4)&&"red candle",(up(L)>=.5||up(P)>=.5)&&"upper wick",L.c<P.l&&"broke previous low",mx(c.slice(-4).map(x=>x.h))<peak*.99&&"lower high",L.c<ma20&&"below 15m MA20"].filter(Boolean);
+  const h1=H[H.length-1],bullH=h1.c>h1.o&&(h1.c-h1.o)/rg(h1)>=.6&&up(h1)<.15,bearH=h1.c<h1.o||up(h1)>=.5;
+  // plan
+  const atr=avg(c.slice(-14).map((x,i)=>{const pc=c[n-14+i-1].c;return Math.max(x.h-x.l,Math.abs(x.h-pc),Math.abs(x.l-pc))}));
+  const stop=Math.max(peak+.5*atr,price+1.5*atr),sp=(stop/price-1)*100,sw=peak-swLow;
+  const tp1=peak-.5*sw,tp2=peak-.786*sw,rr1=(price-tp1)/(stop-price),ent2=price+.4*(peak-price),rrR=(ent2-tp1)/(stop-ent2);
+  const fr=pi?+pi.lastFundingRate*100:0;
+  const G=[
+    ["Big 24h pump",pct>=15,"+"+pct.toFixed(1)+"% (need 15%+)"],
+    ["Liquidity",qv>=15e6,"$"+(qv/1e6).toFixed(0)+"M (need $15M+)"],
+    ["Stretched from 1h MA25",ext>=6,ext.toFixed(1)+"% (need 6%+)"],
+    ["Volume signal",vol.length>0,vol.join(", ")||"none"],
+    ["Pump not still strong",!strong,strong?"green candles, volume rising":"ok"],
+    ["Bearish structure (15m)",bs.length>=2,bs.join(", ")||"none"],
+    ["1h candle not bullish",!bullH,bullH?"strong green 1h candle":"ok"],
+    ["Not too late",drop<=8,drop.toFixed(1)+"% below peak (max 8%)"],
+    ["Funding ok",fr>=-.05,fr.toFixed(4)+"% (min -0.05%)"],
+    ["Stop distance sane",sp<=8,sp.toFixed(1)+"% (max 8%)"],
+    ["Risk : reward 1:2+",rr1>=2,"1 : "+Math.max(rr1,0).toFixed(1)],
+    ["BTC not surging",btc.chg<=2,"BTC "+btc.chg.toFixed(1)+"% in 2h (max +2%)"]];
+  const oi=oiH&&oiH.length>3?oiH.map(x=>+x.sumOpenInterestValue):null,ma25d=avg(D.slice(-25).map(x=>x.c));
+  const B=[
+    ["Longs crowded (funding)",fr>=.03,fr.toFixed(4)+"%"],
+    ["Open interest falling",oi?oi[oi.length-1]<=mx(oi)*.97:null,oi?((oi[oi.length-1]/mx(oi)-1)*100).toFixed(1)+"% from peak":"no data"],
+    ["Rejected at daily MA25",price<ma25d&&peak>=ma25d*.97,"daily MA25 "+fp(ma25d)],
+    ["1h candle bearish",bearH,bearH?"red or upper wick":"no"],
+    ["Two volume signals",vol.length>=2,vol.length+" found"]];
+  const fails=G.filter(g=>!g[1]).map(g=>g[0]),np=G.length-fails.length;
+  const grade=!fails.length?"READY":fails.every(f=>f=="Not too late"||f=="Risk : reward 1:2+")&&rrR>=2?"WATCH":np>=10?"NEAR":"NO";
+  const d30=(price/D[Math.max(0,D.length-31)].c-1)*100;
+  return{sym:t.symbol,pct,price,peak,stop,tp1,tp2,ent2,rr1,rrR,G,B,fails,np,grade,
+    ctx:"30-day move "+(d30>=0?"+":"")+d30.toFixed(0)+"%"+(d30>=80?" (strong uptrend: riskier short)":d30<=-20?" (downtrend bounce)":"")};
 }
 
-function render(res){
-  $("#out").innerHTML=res.sort((a,b)=>b.score-a.score).map(r=>{
-    const col=r.lab=="SHORT"?"var(--red)":r.lab=="WAIT"?"var(--amb)":"var(--mut)";
-    const name=r.lab=="SHORT"?"SHORT SETUP":r.lab;
-    return`<section class="card"><div class="top"><span class="sym">${esc(r.sym.replace("USDT",""))}<span class="sub"> /USDT</span></span><span class="pct">+${r.pct.toFixed(1)}%</span></div>
-    <div class="sub">Price ${fp(r.price)}</div>
-    <div class="bar"><i style="width:${r.score}%;background:${col}"></i></div>
-    <div class="row"><span class="lab ${r.lab}">${name}</span><span class="sc">${r.score}/100</span></div>
-    <details><summary>Checklist and trade plan</summary><div class="ck">${r.rows.map(x=>{const k=x[0]>=x[1]?["✓","y"]:x[0]>0?["~","p"]:["✗","n"];return`<span class="${k[1]}">${k[0]}</span><b>${esc(x[2])}</b><span>${esc(x[3])}</span>`}).join("")}</div>
-    <div class="plan"><div>Entry<b>${fp(r.price)}</b></div><div>Stop<b>${fp(r.stop)}</b></div><div>Target 1<b>${fp(r.tp1)}</b></div><div>Target 2<b>${fp(r.tp2)}</b></div></div></details></section>`}).join("")
-    ||'<p class="sub">No gainers matched the filter right now.</p>';
+function card(r){
+  const col=r.grade=="READY"?"var(--red)":r.grade=="WATCH"?"var(--amb)":"var(--mut)",w=r.grade=="WATCH";
+  const nm={READY:"SHORT READY",WATCH:"WATCH · retest",NEAR:"NEAR",NO:"NO"}[r.grade],ent=w?r.ent2:r.price,sz=100/((r.stop/ent-1)*100);
+  const gl=r.G.map(g=>`<span class="${g[1]?"y":"n"}">${g[1]?"✓":"✗"}</span><b>${esc(g[0])}</b><span>${esc(g[2])}</span>`).join("");
+  const bl=r.B.map(b=>`<span class="${b[1]?"y":b[1]===null?"p":"n"}">${b[1]?"+":b[1]===null?"?":"–"}</span><b>${esc(b[0])}</b><span>${esc(b[2])}</span>`).join("");
+  const note=r.grade=="READY"?`Entry now is valid. Risk 1% of account: position about ${sz.toFixed(0)}% of account (${(sz/3).toFixed(0)}% margin at 3x). Reward 1 : ${r.rr1.toFixed(1)} to target 1.`
+    :w?`Not at market. Place a sell limit at ${fp(r.ent2)} and cancel it if price closes above ${fp(r.stop)}. Reward 1 : ${r.rrR.toFixed(1)} from there. Position about ${sz.toFixed(0)}% of account at 1% risk.`:"";
+  return`<section class="card"><div class="top"><span class="sym">${esc(r.sym.replace("USDT",""))}<span class="sub"> /USDT</span></span><span class="pct">+${r.pct.toFixed(1)}%</span></div>
+  <div class="sub">Price ${fp(r.price)} · peak ${fp(r.peak)} · ${esc(r.ctx)}</div>
+  <div class="bar"><i style="width:${r.np/12*100}%;background:${col}"></i></div>
+  <div class="row"><span class="lab ${r.grade}">${nm}</span><span class="sub">${r.np}/12 rules passed</span></div>
+  ${r.fails.length?`<div class="miss">Missing: ${esc(r.fails.join(", "))}</div>`:""}
+  ${note?`<div class="note">${esc(note)}</div>`:""}
+  <details><summary>All rules and trade plan</summary><h3>Must pass (12)</h3><div class="ck">${gl}</div><h3>Extra confirmation</h3><div class="ck">${bl}</div>
+  <div class="plan"><div>${w?"Limit entry":"Entry"}<b>${fp(ent)}</b></div><div>Stop<b>${fp(r.stop)}</b></div><div>Target 1<b>${fp(r.tp1)}</b></div><div>Target 2<b>${fp(r.tp2)}</b></div></div></details></section>`;
 }
 
-async function notify(res){
+const ord={READY:0,WATCH:1,NEAR:2,NO:3};
+function render(){
+  const cnt=g=>data.filter(r=>g.includes(r.grade)).length;
+  document.querySelectorAll(".tabs button").forEach(b=>{const t=b.dataset.t;b.classList.toggle("on",t==tab);
+    b.textContent=t=="ready"?"Ready "+cnt(["READY"]):t=="watch"?"Watch "+cnt(["WATCH","NEAR"]):"All "+data.length});
+  const show=data.filter(r=>tab=="ready"?r.grade=="READY":tab=="watch"?r.grade=="WATCH"||r.grade=="NEAR":true).sort((a,b)=>ord[a.grade]-ord[b.grade]||b.np-a.np);
+  $("#out").innerHTML=show.map(card).join("")||`<p class="sub">${tab=="ready"?"No coin passes all 12 rules right now. That is normal: only a few coins a day should. Check the Watch tab.":"Nothing here right now."}</p>`;
+}
+
+async function notify(){
   if(!("Notification"in window)||Notification.permission!="granted")return;
   const reg=await navigator.serviceWorker.getRegistration();
-  res.filter(r=>r.lab=="SHORT"&&!(seen[r.sym]>Date.now()-36e5)).forEach(r=>{
-    seen[r.sym]=Date.now();
-    const o={body:`Score ${r.score}/100, entry ${fp(r.price)}, stop ${fp(r.stop)}`,tag:r.sym};
-    reg?reg.showNotification("Short setup: "+r.sym,o):new Notification("Short setup: "+r.sym,o);
+  data.filter(r=>(r.grade=="READY"||r.grade=="WATCH")&&!(seen[r.sym+r.grade]>Date.now()-36e5)).forEach(r=>{
+    seen[r.sym+r.grade]=Date.now();
+    const o={body:(r.grade=="READY"?"Entry ":"Limit ")+fp(r.grade=="READY"?r.price:r.ent2)+", stop "+fp(r.stop)+", target "+fp(r.tp1),tag:r.sym},ti=(r.grade=="READY"?"Short ready: ":"Watch retest: ")+r.sym;
+    reg?reg.showNotification(ti,o):new Notification(ti,o);
   });
 }
 
-let busy=false;
 async function scan(){
   if(busy)return;busy=true;$("#st").textContent="Scanning…";
   try{
-    const[tk,pi]=await Promise.all([j("ticker/24hr"),j("premiumIndex")]);
-    const fm={};pi.forEach(p=>fm[p.symbol]=p);
-    const list=tk.filter(t=>/^[A-Z0-9]+USDT$/.test(t.symbol)&&+t.quoteVolume>=MINVOL&&+t.priceChangePercent>0)
+    const[tk,pi,bk]=await Promise.all([j("fapi/v1/ticker/24hr"),j("fapi/v1/premiumIndex"),j("fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=4")]);
+    const bc=bk.map(k=>+k[4]),btc={chg:(bc[3]/bc[1]-1)*100},fm={};pi.forEach(p=>fm[p.symbol]=p);
+    $("#btc").textContent="BTC "+(btc.chg>=0?"+":"")+btc.chg.toFixed(1)+"% in 2h"+(btc.chg>2?" · surging, shorts blocked":"");
+    const list=tk.filter(t=>/^[A-Z0-9]+USDT$/.test(t.symbol)&&+t.quoteVolume>=MINVOL&&+t.priceChangePercent>=8)
       .sort((a,b)=>b.priceChangePercent-a.priceChangePercent).slice(0,TOP);
-    const res=await Promise.all(list.map(async t=>{
-      const[a,b]=await Promise.all([j(`klines?symbol=${t.symbol}&interval=15m&limit=97`),j(`klines?symbol=${t.symbol}&interval=1h&limit=30`)]);
-      return analyze(t,a,b,fm[t.symbol]);
-    }));
-    render(res);notify(res);
-    $("#st").textContent="Updated "+new Date().toLocaleTimeString()+" · top "+TOP+" futures gainers";
+    data=(await Promise.all(list.map(async t=>{try{const s=t.symbol;
+      const[a,b,d,o]=await Promise.all([j(`fapi/v1/klines?symbol=${s}&interval=15m&limit=97`),j(`fapi/v1/klines?symbol=${s}&interval=1h&limit=60`),j(`fapi/v1/klines?symbol=${s}&interval=1d&limit=40`),j(`futures/data/openInterestHist?symbol=${s}&period=15m&limit=16`).catch(()=>null)]);
+      return analyze(t,a,b,d,o,fm[s],btc)}catch(e){return null}}))).filter(Boolean);
+    render();notify();
+    $("#st").textContent="Updated "+new Date().toLocaleTimeString()+" · scanned "+list.length+" top futures gainers";
   }catch(e){$("#st").textContent="Could not load data ("+e.message+"). Check internet; Binance may be blocked on this network."}
   busy=false;
 }
 $("#rf").onclick=scan;
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});
 $("#al").onclick=async()=>{
   if(!("Notification"in window))return alert("Notifications are not supported in this browser.");
   const p=await Notification.requestPermission();$("#al").textContent=p=="granted"?"Alerts on":"Alerts";
 };
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 if("Notification"in window&&Notification.permission=="granted")$("#al").textContent="Alerts on";
-scan();setInterval(()=>{if(!document.hidden)scan()},EVERY);
+render();scan();setInterval(()=>{if(!document.hidden)scan()},EVERY);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)scan()});
 </script></body></html>
